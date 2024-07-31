@@ -21,7 +21,6 @@ from models.ema import EMAHelper
 
 __all__ = ['NCSNRunner']
 
-
 def get_model(config):
     if config.data.dataset == 'CIFAR10' or config.data.dataset == 'CELEBA':
         return NCSNv2(config).to(config.device)
@@ -190,10 +189,16 @@ class NCSNRunner():
                                                   device=self.config.device)
                         init_samples = data_transform(self.config, init_samples)
 
+                        # print("shape of init_samples:" ,init_samples.size())
+                        # print("First init_sample:" ,init_samples[0][0])
+                        # print("First test_dataloader" , test_dataset[0])
+
+                        # save_image(init_samples,'pictures3/image_before_{}.png'.format(step))
+
                         all_samples = anneal_Langevin_dynamics(init_samples, test_score, sigmas.cpu().numpy(),
                                                                self.config.sampling.n_steps_each,
                                                                self.config.sampling.step_lr,
-                                                               final_only=True, verbose=True,
+                                                               final_only=True, verbose=False,
                                                                denoise=self.config.sampling.denoise)
 
                         sample = all_samples[-1].view(all_samples[-1].shape[0], self.config.data.channels,
