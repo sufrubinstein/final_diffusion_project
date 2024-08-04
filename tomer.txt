@@ -1,0 +1,69 @@
+Folder already exists. Overwrite? (Y/N)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+data: !!python/object:argparse.Namespace
+  channels: 3
+  dataset: CIFAR10
+  gaussian_dequantization: false
+  image_size: 32
+  logit_transform: false
+  num_workers: 4
+  random_flip: true
+  rescaled: false
+  uniform_dequantization: false
+device: !!python/object/apply:torch.device
+- cuda
+fast_fid: !!python/object:argparse.Namespace
+  batch_size: 1000
+  begin_ckpt: 5000
+  end_ckpt: 300000
+  ensemble: false
+  n_steps_each: 5
+  num_samples: 1000
+  step_lr: 6.2e-06
+  verbose: false
+model: !!python/object:argparse.Namespace
+  ema: true
+  ema_rate: 0.999
+  ngf: 128
+  nonlinearity: elu
+  normalization: InstanceNorm++
+  num_classes: 232
+  sigma_begin: 0.25
+  sigma_dist: geometric
+  sigma_end: 0.01
+  spec_norm: false
+optim: !!python/object:argparse.Namespace
+  amsgrad: false
+  beta1: 0.9
+  eps: 1.0e-08
+  lr: 0.0001
+  optimizer: Adam
+  weight_decay: 0.0
+sampling: !!python/object:argparse.Namespace
+  batch_size: 100
+  ckpt_id: 300000
+  data_init: false
+  denoise: true
+  fid: false
+  final_only: true
+  inpainting: false
+  interpolation: false
+  n_interpolations: 15
+  n_steps_each: 5
+  num_samples4fid: 10000
+  step_lr: 6.2e-06
+test: !!python/object:argparse.Namespace
+  batch_size: 100
+  begin_ckpt: 5000
+  end_ckpt: 300000
+training: !!python/object:argparse.Namespace
+  anneal_power: 2
+  batch_size: 128
+  log_all_sigmas: false
+  n_epochs: 500000
+  n_iters: 70001
+  snapshot_freq: 5
+  snapshot_sampling: true
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+Files already downloaded and verified
+Files already downloaded and verified
