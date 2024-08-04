@@ -27,7 +27,7 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
                              final_only=False, verbose=False, denoise=True):
     images = []
     
-    counter2 = 0
+
     global counter1
     counter1 = counter1 + 1
     # save_image(x_mod,'pictures/image_before_{}.png'.format(counter1))
@@ -37,19 +37,6 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
             labels = torch.ones(x_mod.shape[0], device=x_mod.device) * c
             labels = labels.long()
             step_size = step_lr * (sigma / sigmas[-1]) ** 2
-
-            counter2 = counter2 + 1
-            num_sigmas = len(sigmas)
-            num_labels = len(labels)
-            c_val = c
-            print(sigmas)
-
-            print(f"There are {num_sigmas} sigmas.")
-            print(f"There are {num_labels} labels.")
-            print(f"C value is {c_val} sigmas.")
-            print("toimerrrrr")
-
-
 
             for s in range(n_steps_each):
                 grad = scorenet(x_mod, labels)
@@ -69,12 +56,9 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
                     print("level: {}, step_size: {}, grad_norm: {}, image_norm: {}, snr: {}, grad_mean_norm: {}".format(
                         c, step_size, grad_norm.item(), image_norm.item(), snr.item(), grad_mean_norm.item()))
             
-            save_image(x_mod,'pictures/new_image_inbetween_for_sigma{}_{}_{}.png'.format(c, counter1,counter2//100))
+            if(counter1 == 20):
+                save_image(x_mod,'test_with_noise/image_for_sigma{}.png'.format(c))
 
-        # print(f"Before denoise:")
-        # save_image(x_mod,'pictures2/image_before_{}.png'.format(counter))
-        # cv2.imshow('Before' , x_mod.cpu().numpy())
-        # print(f"Size of sigmas:" , type(sigmas) , f"Sigmas:" , sigmas ,f"Labels:" , labels.size() , labels)
 
         # save_image(x_mod,'pictures/image_before-denoise_{}.png'.format(counter1))
 
@@ -85,6 +69,7 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
             images.append(x_mod.to('cpu'))
             
         # save_image(x_mod,'pictures/image_after_{}.png'.format(counter1))
+
         if final_only:
             return [x_mod.to('cpu')]
         else:

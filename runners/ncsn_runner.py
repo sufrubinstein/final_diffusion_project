@@ -19,6 +19,10 @@ from models import (anneal_Langevin_dynamics,
 from models import get_sigmas
 from models.ema import EMAHelper
 
+from PIL import Image
+import torchvision.transforms as transforms
+
+
 __all__ = ['NCSNRunner']
 
 def get_model(config):
@@ -184,22 +188,63 @@ class NCSNRunner():
 
                         ## Different part from NeurIPS 2019.
                         ## Random state will be affected because of sampling during training time.
-                        init_samples = torch.rand(36, self.config.data.channels,
-                                                  self.config.data.image_size, self.config.data.image_size,
-                                                  device=self.config.device)
+
+
+                        # ORIGINAL CODE!!!!
+
+                        # init_samples = torch.rand(36, self.config.data.channels,
+                        #                           self.config.data.image_size, self.config.data.image_size,
+                        #                           device=self.config.device)
+                        # init_samples = data_transform(self.config, init_samples)
+
+
+                        # test_pictures = test_X[:36]
+                        # save_image(test_pictures,'picturetest/test_clean_images_{}.png'.format(step))
+                        # test_pictures = test_pictures + torch.randn_like(test_pictures)*0.25
+                        # save_image(test_pictures,'picturetest/test_noisy_images_{}.png'.format(step))
+
+                        # init_samples = data_transform(self.config, test_pictures)
+
+
+
+
+                        # Load the image
+                        image_path = 'bulbasaur.jpg'
+                        image = Image.open(image_path)
+
+                        # Define the transform to resize and normalize the image
+                        transform = transforms.Compose([
+                            transforms.Resize((self.config.data.image_size, self.config.data.image_size)),
+                            transforms.ToTensor()
+                        ])
+                        
+                        # Apply the transform to the image
+                        image_tensor = transform(image)
+
+                        # Repeat the image tensor to match the batch size and channels
+                        init_samples = image_tensor.unsqueeze(0).repeat(36, 1, 1, 1).to(self.config.device)
                         init_samples = data_transform(self.config, init_samples)
+                        
+                        # Adding Gaussian noise
+                        gaussian_noise = torch.randn(init_samples.size()).to(self.config.device) * 0.25
 
-                        # print("shape of init_samples:" ,init_samples.size())
-                        # print("First init_sample:" ,init_samples[0][0])
-                        # print("First test_dataloader" , test_dataset[0])
+                        # Add the Gaussian noise to the image tensor
+                        noisy_init_samples = init_samples + gaussian_noise
 
-                        # save_image(init_samples,'pictures3/image_before_{}.png'.format(step))
+                        # Clamp the values to be in the range [0, 1]
+                        noisy_init_samples = torch.clamp(noisy_init_samples, 0, 1)
 
-                        all_samples = anneal_Langevin_dynamics(init_samples, test_score, sigmas.cpu().numpy(),
+                        # Now noisy_init_samples contains the image with Gaussian noise added 
+
+                        
+                        # here we changed from init_samples to noisy_image_samples!!!! 
+                        all_samples = anneal_Langevin_dynamics(noisy_init_samples, test_score, sigmas.cpu().numpy(),
                                                                self.config.sampling.n_steps_each,
                                                                self.config.sampling.step_lr,
                                                                final_only=True, verbose=False,
                                                                denoise=self.config.sampling.denoise)
+
+
 
                         sample = all_samples[-1].view(all_samples[-1].shape[0], self.config.data.channels,
                                                       self.config.data.image_size,
