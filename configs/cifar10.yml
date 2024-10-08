@@ -2,7 +2,7 @@ training:
   batch_size: 128
   n_epochs: 500000
   n_iters: 70001
-  snapshot_freq: 3000
+  snapshot_freq: 5000
   snapshot_sampling: true
   anneal_power: 2
   log_all_sigmas: false
@@ -11,7 +11,7 @@ sampling:
   batch_size: 100
   data_init: false
   step_lr: 0.0000062
-  n_steps_each: 5
+  n_steps_each: 10
   ckpt_id: 300000
   final_only: true
   fid: false
@@ -48,7 +48,7 @@ data:
   num_workers: 4
 
 model:
-  sigma_begin: 0.25
+  sigma_begin: 50
   num_classes: 232
   ema: true
   ema_rate: 0.999

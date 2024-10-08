@@ -9,6 +9,7 @@ def anneal_dsm_score_estimation(scorenet, samples, sigmas, labels=None, anneal_p
     target = - 1 / (used_sigmas ** 2) * noise
     scores = scorenet(perturbed_samples, labels)
     target = target.view(target.shape[0], -1)
+    
     scores = scores.view(scores.shape[0], -1)
     loss = 1 / 2. * ((scores - target) ** 2).sum(dim=-1) * used_sigmas.squeeze() ** anneal_power
 

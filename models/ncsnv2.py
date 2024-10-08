@@ -94,8 +94,15 @@ class NCSNv2(nn.Module):
         output = self.act(output)
         output = self.end_conv(output)
 
-        used_sigmas = self.sigmas[y].view(x.shape[0], *([1] * len(x.shape[1:])))
 
+        sigmas2 = torch.tensor(np.linspace(0.25, 0.01, self.config.model.num_classes)).float().to(self.config.device)
+        if(self.training):
+            used_sigmas = self.sigmas[y].view(x.shape[0], *([1] * len(x.shape[1:])))
+            # print("Using og sigmas")
+        else:
+            used_sigmas = sigmas2[y].view(x.shape[0], *([1] * len(x.shape[1:])))
+            # print("Using sigmas2")
+            # print(y)
         output = output / used_sigmas
 
         return output

@@ -4,6 +4,11 @@ import cv2
 import os
 from torchvision.utils import make_grid, save_image
 
+
+
+from PIL import Image
+import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
 counter1 = 0
 
 
@@ -27,10 +32,32 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
                              final_only=False, verbose=False, denoise=True):
     images = []
     
+    x_0 = x_mod
 
     global counter1
     counter1 = counter1 + 1
     # save_image(x_mod,'pictures/image_before_{}.png'.format(counter1))
+
+    sigmas = torch.tensor(np.linspace(0.1, 0.01, 232)).float()
+
+    # # NEW CODE
+    # # Define the first element and common ratio
+    # sigma0 = 0.25
+    # q = 0.7071
+    # # q = 0.986
+    # num_elements = 232
+
+    # # Create the geometric series
+    # sigmas = torch.tensor([sigma0 * q**n for n in range(num_elements)]).float()
+
+    # print(sigmas)
+
+    # # Check the results
+    # print(f"First sigma: {sigmas[0]}")
+    # print(f"Last sigma: {sigmas[-1]}")
+    # print(f"Sigmas: {sigmas}")
+    # # END NEW CODE
+
 
     with torch.no_grad():
         for c, sigma in enumerate(sigmas):
@@ -38,17 +65,36 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
             labels = labels.long()
             step_size = step_lr * (sigma / sigmas[-1]) ** 2
 
+
             for s in range(n_steps_each):
                 grad = scorenet(x_mod, labels)
-
+                # if(s == 0 and c == 0):
+                #     save_image(grad,'x_mode_after/grad_train{}.png'.format(c))
+                #     print(sigmas[0])
+                #     img = grad * ( sigmas[0] ** 2 ) + x_mod
+                #     save_image(img[0],'x_mode_after/img{}.png'.format(c))           
+                
                 noise = torch.randn_like(x_mod)
                 grad_norm = torch.norm(grad.view(grad.shape[0], -1), dim=-1).mean()
                 noise_norm = torch.norm(noise.view(noise.shape[0], -1), dim=-1).mean()
-                x_mod = x_mod + step_size * grad + noise * np.sqrt(step_size * 2)
+                # if(s == 0 and c == 9):
+                #     save_image(x_mod,'x_mode_before/image_for_sigma_withsc{}.png'.format(c))
+                if(sigma == sigmas[0]):
+                    continue
+                grad_technion = grad + (x_0 - x_mod) / (sigmas[0]**2 - sigma**2)
+
+                # previous eq
+                #x_mod = x_mod + step_size * grad + noise * np.sqrt(step_size * 2)
+
+                x_mod = x_mod + step_size * grad_technion + noise * np.sqrt(step_size * 2)
+                # if(s == 0 and c == 9):
+                #     save_image(x_mod,'x_mode_after/image_for_sigma_withsc{}.png'.format(c))
 
                 image_norm = torch.norm(x_mod.view(x_mod.shape[0], -1), dim=-1).mean()
                 snr = np.sqrt(step_size / 2.) * grad_norm / noise_norm
                 grad_mean_norm = torch.norm(grad.mean(dim=0).view(-1)) ** 2 * sigma ** 2
+                
+
 
                 if not final_only:
                     images.append(x_mod.to('cpu'))
@@ -56,8 +102,8 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
                     print("level: {}, step_size: {}, grad_norm: {}, image_norm: {}, snr: {}, grad_mean_norm: {}".format(
                         c, step_size, grad_norm.item(), image_norm.item(), snr.item(), grad_mean_norm.item()))
             
-            if(counter1 == 20):
-                save_image(x_mod,'test_with_noise/image_for_sigma{}.png'.format(c))
+            if(counter1 == 12):
+                save_image(x_mod,'new_dataset__results/image_for_sigma{}.png'.format(c))
 
 
         # save_image(x_mod,'pictures/image_before-denoise_{}.png'.format(counter1))
@@ -67,8 +113,7 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
             last_noise = last_noise.long()
             x_mod = x_mod + sigmas[-1] ** 2 * scorenet(x_mod, last_noise)
             images.append(x_mod.to('cpu'))
-            
-        # save_image(x_mod,'pictures/image_after_{}.png'.format(counter1))
+
 
         if final_only:
             return [x_mod.to('cpu')]

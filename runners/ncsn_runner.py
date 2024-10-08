@@ -21,6 +21,8 @@ from models.ema import EMAHelper
 
 from PIL import Image
 import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
+
 
 
 __all__ = ['NCSNRunner']
@@ -47,6 +49,36 @@ class NCSNRunner():
         test_loader = DataLoader(test_dataset, batch_size=self.config.training.batch_size, shuffle=True,
                                  num_workers=self.config.data.num_workers, drop_last=True)
         test_iter = iter(test_loader)
+        # our code
+        data_iter = iter(dataloader)
+        images, labels = next(data_iter)
+        images_test, labels_test = next(test_iter)
+
+        # Get the first image and its corresponding label
+        first_image_celeba = images[0]
+        first_label_celeba = labels[0]
+        
+        first_image_celeba_test = images_test[0]
+        first_label_celeba_test = labels_test[0]
+
+        # Convert the image tensor to a NumPy array
+        # Assuming the images are in the format [C, H, W] (Channels, Height, Width)
+        first_image_celeba = first_image_celeba.numpy().transpose((1, 2, 0))
+        plt.imshow(first_image_celeba)
+        plt.axis('off')
+        file_path = os.path.join('test_image', 'first_image_celeba.png')
+        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)  # Save the image to the file path
+        # end of our code
+
+        # Convert the image tensor to a NumPy array
+        # Assuming the images are in the format [C, H, W] (Channels, Height, Width)
+        first_image_celeba_test = first_image_celeba_test.numpy().transpose((1, 2, 0))
+        plt.imshow(first_image_celeba_test)
+        plt.axis('off')
+        file_path = os.path.join('test_image', 'first_image_celeba_test.png')
+        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)  # Save the image to the file path
+        # end of our code
+                
         self.config.input_dim = self.config.data.image_size ** 2 * self.config.data.channels
 
         tb_logger = self.config.tb_logger
@@ -209,36 +241,49 @@ class NCSNRunner():
 
 
                         # Load the image
-                        image_path = 'bulbasaur.jpg'
+                        image_path = 'test_image/first_image_celeba.png'
                         image = Image.open(image_path)
-
+                        
                         # Define the transform to resize and normalize the image
                         transform = transforms.Compose([
                             transforms.Resize((self.config.data.image_size, self.config.data.image_size)),
                             transforms.ToTensor()
                         ])
+
+                        image = image.convert('RGB')
                         
                         # Apply the transform to the image
-                        image_tensor = transform(image)
+                        image_tensor = transform(image).to(self.config.device)
 
-                        # Repeat the image tensor to match the batch size and channels
-                        init_samples = image_tensor.unsqueeze(0).repeat(36, 1, 1, 1).to(self.config.device)
-                        init_samples = data_transform(self.config, init_samples)
-                        
                         # Adding Gaussian noise
-                        gaussian_noise = torch.randn(init_samples.size()).to(self.config.device) * 0.25
+                        gaussian_noise = torch.randn(image_tensor.size()).to(self.config.device) * 0.25
+
 
                         # Add the Gaussian noise to the image tensor
-                        noisy_init_samples = init_samples + gaussian_noise
+                        noisy_init_samples = image_tensor  + gaussian_noise
 
-                        # Clamp the values to be in the range [0, 1]
-                        noisy_init_samples = torch.clamp(noisy_init_samples, 0, 1)
+                        # Repeat the image tensor to match the batch size and channels
+                        init_samples = noisy_init_samples.unsqueeze(0).repeat(36, 1, 1,1).to(self.config.device)
+                        init_samples = data_transform(self.config, init_samples)
+                        
+
+
+                        max_val = init_samples.max()
+                        min_val = init_samples.min()
+
+                        # normalize the values between 0 and 1
+                        if max_val > min_val:
+                            init_samples = (init_samples - min_val) / (max_val - min_val)
+                        else:
+                            init_samples = init_samples / max_val
+
 
                         # Now noisy_init_samples contains the image with Gaussian noise added 
+                        # save_image(init_samples,'init_samples/test_noisy_images_{}.png'.format(step))
 
                         
                         # here we changed from init_samples to noisy_image_samples!!!! 
-                        all_samples = anneal_Langevin_dynamics(noisy_init_samples, test_score, sigmas.cpu().numpy(),
+                        all_samples = anneal_Langevin_dynamics(init_samples, test_score, sigmas.cpu().numpy(),
                                                                self.config.sampling.n_steps_each,
                                                                self.config.sampling.step_lr,
                                                                final_only=True, verbose=False,
