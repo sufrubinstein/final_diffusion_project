@@ -48,11 +48,14 @@ class NCSNRunner():
                                 num_workers=self.config.data.num_workers)
         test_loader = DataLoader(test_dataset, batch_size=self.config.training.batch_size, shuffle=True,
                                  num_workers=self.config.data.num_workers, drop_last=True)
+
         test_iter = iter(test_loader)
         # our code
         data_iter = iter(dataloader)
         images, labels = next(data_iter)
         images_test, labels_test = next(test_iter)
+        print(len(dataloader))
+        print(len(test_loader))
 
         # Get the first image and its corresponding label
         first_image_celeba = images[0]
