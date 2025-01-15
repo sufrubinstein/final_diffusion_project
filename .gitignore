@@ -5,4 +5,5 @@ exp/
 test_sigma_*/
 gaus_*/
 0625_train_1/
+old_testes/
 __pycache__
