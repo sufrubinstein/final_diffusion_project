@@ -2,4 +2,7 @@
 *.pdf
 exp/
 .idea/
+test_sigma_*/
+gaus_*/
+0625_train_1/
 __pycache__
