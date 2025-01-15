@@ -3,12 +3,11 @@ import numpy as np
 import cv2
 import os
 from torchvision.utils import make_grid, save_image
-
-
-
 from PIL import Image
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+
+
 counter1 = 0
 
 
@@ -28,8 +27,8 @@ def get_sigmas(config):
     return sigmas
 
 @torch.no_grad()
-def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=0.000008,
-                             final_only=False, verbose=False, denoise=True):
+def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=3.3e-6,
+                             final_only=False, verbose=False, denoise=True, sigma_noise_0 = 0.1 , save_path = ''):
     images = []
     
     x_0 = x_mod
@@ -38,26 +37,7 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
     counter1 = counter1 + 1
     # save_image(x_mod,'pictures/image_before_{}.png'.format(counter1))
 
-    sigmas = torch.tensor(np.linspace(0.1, 0.01, 232)).float()
-
-    # # NEW CODE
-    # # Define the first element and common ratio
-    # sigma0 = 0.25
-    # q = 0.7071
-    # # q = 0.986
-    # num_elements = 232
-
-    # # Create the geometric series
-    # sigmas = torch.tensor([sigma0 * q**n for n in range(num_elements)]).float()
-
-    # print(sigmas)
-
-    # # Check the results
-    # print(f"First sigma: {sigmas[0]}")
-    # print(f"Last sigma: {sigmas[-1]}")
-    # print(f"Sigmas: {sigmas}")
-    # # END NEW CODE
-
+    sigmas = torch.tensor(np.linspace(sigma_noise_0 , sigmas[-1], len(sigmas))).float() #step size sigmas
 
     with torch.no_grad():
         for c, sigma in enumerate(sigmas):
@@ -68,12 +48,15 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
 
             for s in range(n_steps_each):
                 grad = scorenet(x_mod, labels)
-                # if(s == 0 and c == 0):
-                #     save_image(grad,'x_mode_after/grad_train{}.png'.format(c))
-                #     print(sigmas[0])
-                #     img = grad * ( sigmas[0] ** 2 ) + x_mod
-                #     save_image(img[0],'x_mode_after/img{}.png'.format(c))           
-                
+                # if(s == 0 and (c >= 10 and c <= 25)):
+                    # save_image(grad,'grad_init_output/grad_train{}.png'.format(c))
+                    # print(f"grad: {torch.mean(grad.view(grad.shape[0], -1))}")
+                    # print(f"x_mod before: {torch.mean(x_mod.view(x_mod.shape[0], -1))}")
+                    # mse = x_mod - grad
+                    # for i in range(x_mod.size()[0]):
+                    #     save_image(x_mod[i],'grad_init_output/mse_image_{}.png'.format(i))
+
+           
                 noise = torch.randn_like(x_mod)
                 grad_norm = torch.norm(grad.view(grad.shape[0], -1), dim=-1).mean()
                 noise_norm = torch.norm(noise.view(noise.shape[0], -1), dim=-1).mean()
@@ -95,15 +78,25 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
                 grad_mean_norm = torch.norm(grad.mean(dim=0).view(-1)) ** 2 * sigma ** 2
                 
 
-
                 if not final_only:
                     images.append(x_mod.to('cpu'))
                 if verbose:
                     print("level: {}, step_size: {}, grad_norm: {}, image_norm: {}, snr: {}, grad_mean_norm: {}".format(
                         c, step_size, grad_norm.item(), image_norm.item(), snr.item(), grad_mean_norm.item()))
             
-            if(counter1 == 12):
-                save_image(x_mod,'new_dataset__results/image_for_sigma{}.png'.format(c))
+            # print(f"x_mod after: {torch.mean(x_mod.view(x_mod.shape[0], -1))}")
+
+            # if(c == len(sigmas) - 1):
+            #     for i in range(x_mod.size()[0]):
+            #         save_image(x_mod[i] ,save_path + '/test_sigma_{}_{}.png'.format(sigma_noise_0 ,i))
+
+            if( ((c % 10 == 0) or (c == len(sigmas) - 1))):
+                save_image(x_mod ,save_path +'/image_for_sigma{}.png'.format(c))
+                if(c == 0):
+                    for i in range(x_mod.size()[0]):
+                        save_image(x_mod[i] ,save_path + '/noisy_image_{}.png'.format(i))
+                for i in range(x_mod.size()[0]):
+                    save_image(x_mod[i] ,save_path + '/denoised_image_{}.png'.format(i))
 
 
         # save_image(x_mod,'pictures/image_before-denoise_{}.png'.format(counter1))
@@ -113,7 +106,6 @@ def anneal_Langevin_dynamics(x_mod, scorenet, sigmas, n_steps_each=200, step_lr=
             last_noise = last_noise.long()
             x_mod = x_mod + sigmas[-1] ** 2 * scorenet(x_mod, last_noise)
             images.append(x_mod.to('cpu'))
-
 
         if final_only:
             return [x_mod.to('cpu')]

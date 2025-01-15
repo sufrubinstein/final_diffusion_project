@@ -2,7 +2,6 @@ import numpy as np
 import glob
 import tqdm
 from losses.dsm import anneal_dsm_score_estimation
-
 import torch.nn.functional as F
 import logging
 import torch
@@ -22,8 +21,8 @@ from models.ema import EMAHelper
 from PIL import Image
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-
-
+from skimage.metrics import peak_signal_noise_ratio as psnr , structural_similarity as ssim
+# from our_functions.psnr_func import calculate_fid
 
 __all__ = ['NCSNRunner']
 
@@ -50,38 +49,18 @@ class NCSNRunner():
                                  num_workers=self.config.data.num_workers, drop_last=True)
 
         test_iter = iter(test_loader)
-        # our code
-        data_iter = iter(dataloader)
-        images, labels = next(data_iter)
-        images_test, labels_test = next(test_iter)
-        print(len(dataloader))
-        print(len(test_loader))
-
-        # Get the first image and its corresponding label
-        first_image_celeba = images[0]
-        first_label_celeba = labels[0]
         
-        first_image_celeba_test = images_test[0]
-        first_label_celeba_test = labels_test[0]
 
-        # Convert the image tensor to a NumPy array
-        # Assuming the images are in the format [C, H, W] (Channels, Height, Width)
-        first_image_celeba = first_image_celeba.numpy().transpose((1, 2, 0))
-        plt.imshow(first_image_celeba)
-        plt.axis('off')
-        file_path = os.path.join('test_image', 'first_image_celeba.png')
-        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)  # Save the image to the file path
-        # end of our code
+        # # try for random images in test and not the same image
+        # images_test, labels_test = next(test_iter)
+        # save_image(images_test,'2_test_train_1/original_images.png')
+        # for i in range(images_test.size()[0]):
+        #     save_image(images_test[i],'2_test_train_1/original_image_{}.png'.format(i))
 
-        # Convert the image tensor to a NumPy array
-        # Assuming the images are in the format [C, H, W] (Channels, Height, Width)
-        first_image_celeba_test = first_image_celeba_test.numpy().transpose((1, 2, 0))
-        plt.imshow(first_image_celeba_test)
-        plt.axis('off')
-        file_path = os.path.join('test_image', 'first_image_celeba_test.png')
-        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)  # Save the image to the file path
-        # end of our code
-                
+        psnr_arr = []
+        fid_arr = []
+        ssim_arr = []
+        
         self.config.input_dim = self.config.data.image_size ** 2 * self.config.data.channels
 
         tb_logger = self.config.tb_logger
@@ -109,7 +88,8 @@ class NCSNRunner():
             if self.config.model.ema:
                 ema_helper.load_state_dict(states[4])
 
-        sigmas = get_sigmas(self.config)
+        sigmas = get_sigmas(self.config) #training sigmas 90-0.01 for celeba
+        # print(sigmas)
 
         if self.config.training.log_all_sigmas:
             ### Commented out training time logging to save time.
@@ -174,18 +154,27 @@ class NCSNRunner():
                 if step >= self.config.training.n_iters:
                     return 0
 
-                if step % 100 == 0:
+                # if step % 100 == 0: #Original code
+                if step % self.config.training.snapshot_freq == 0: #for testing all test images - for psnr calculations
                     if self.config.model.ema:
                         test_score = ema_helper.ema_copy(score)
                     else:
                         test_score = score
 
+                    save_path = '0625_train_1'
+
                     test_score.eval()
                     try:
                         test_X, test_y = next(test_iter)
+                        save_image(test_X, save_path + '/original_images.png')
+                        for i in range(test_X.size()[0]):
+                            save_image(test_X[i],save_path + '/original_image_{}.png'.format(i))
                     except StopIteration:
                         test_iter = iter(test_loader)
                         test_X, test_y = next(test_iter)
+                        save_image(test_X,save_path + '/original_images.png')
+                        for i in range(test_X.size()[0]):
+                            save_image(test_X[i],save_path + '/original_image_{}.png'.format(i))
 
                     test_X = test_X.to(self.config.device)
                     test_X = data_transform(self.config, test_X)
@@ -210,7 +199,7 @@ class NCSNRunner():
                     if self.config.model.ema:
                         states.append(ema_helper.state_dict())
 
-                    torch.save(states, os.path.join(self.args.log_path, 'checkpoint_{}.pth'.format(step)))
+                    # torch.save(states, os.path.join(self.args.log_path, 'checkpoint_{}.pth'.format(step)))
                     torch.save(states, os.path.join(self.args.log_path, 'checkpoint.pth'))
 
                     if self.config.training.snapshot_sampling:
@@ -244,8 +233,17 @@ class NCSNRunner():
 
 
                         # Load the image
-                        image_path = 'test_image/first_image_celeba.png'
-                        image = Image.open(image_path)
+                        # image_path = 'real_test/original_images.png'
+                        # image = Image.open(image_path)
+
+                        # image = images_test.to(self.config.device)                    ###### OLD CODE FOR FIRST 8 IMAGES ALWAYS
+                        image = test_X.to(self.config.device)                           ###### NEW CODE FOR ALL IMAGES TESTING
+
+                        # print(f"traget after: {torch.max(image[0])}")
+                        # print(f"traget after: {torch.min(image[0])}")
+
+                        # plt.hist(image[0].view(-1).cpu().numpy(), bins=100)
+                        # plt.savefig('test/hist.png')
                         
                         # Define the transform to resize and normalize the image
                         transform = transforms.Compose([
@@ -253,44 +251,81 @@ class NCSNRunner():
                             transforms.ToTensor()
                         ])
 
-                        image = image.convert('RGB')
+# possible poisson transformation
+
+# no dividing by 255
+
+                        # norm_image = image / 255.0
+                        # for i in range(norm_image.size()[0]):
+                        #     save_image(norm_image[i] * 255.0 ,'grad_init_output/norm_image_{}.png'.format(i))
+
+                        # image = image * 255.0
+                        # print(f"max range after multiply by 255: {torch.max(image[0])}")
+                        # print(f"min range after multiply by 255: {torch.min(image[0])}")
+                        sqrt_images = torch.sqrt(image)
+                        sigma_start_noise =  1 / np.sqrt(255)
+                        poisson_noise = torch.randn(sqrt_images.size()).to(self.config.device) * sigma_start_noise #define gaussian noise 
+                                                                                                                    #for poisson noise case
+                        noisy_init_samples = sqrt_images + poisson_noise
+                        noisy_init_samples = noisy_init_samples * sqrt_images
+                        # print("Min value of noisy_init_samples:", torch.min(noisy_init_samples))
+                        # temp_noisy_image = (noisy_init_samples - torch.min(noisy_init_samples)) / (torch.max(noisy_init_samples) - torch.min(noisy_init_samples))
                         
-                        # Apply the transform to the image
-                        image_tensor = transform(image).to(self.config.device)
-
-                        # Adding Gaussian noise
-                        gaussian_noise = torch.randn(image_tensor.size()).to(self.config.device) * 0.25
+                        # for i in range(temp_noisy_image.size()[0]):
+                        #    save_image(temp_noisy_image[i] ,save_path + '/temp_noisy_possion_image_{}.png'.format(i))
 
 
-                        # Add the Gaussian noise to the image tensor
-                        noisy_init_samples = image_tensor  + gaussian_noise
+                        # # #Anscombe transformation
+                        # noisy_init_samples = 2 * torch.sqrt(torch.clamp(noisy_init_samples + 3.0 / 8.0, min=0))
+                        # temp_max_anscombe = torch.max(noisy_init_samples)
+                        # print(f"maximal value after taking root of the image: {temp_max_anscombe}")
+                        # noisy_init_samples = noisy_init_samples / temp_max_anscombe #[0,1] normalization
+                        # print(f"image max value after anscombe tranform: {torch.max(noisy_init_samples[0])}")
+                        # print(f"image min value after anscombe tranform: {torch.min(noisy_init_samples[0])}")
+                        # for i in range(noisy_init_samples.size()[0]):
+                        #    save_image(noisy_init_samples[i] ,save_path + '/image_after_anscombe_tranform_{}.png'.format(i))
+                        # sigma_start_noise = 1.0 / temp_max_anscombe
+                        # print("sigma start noise value:",sigma_start_noise)
+
+
+
+## maybe we need to normilize the outcome back to [0,1], right now there might be values greater than 1 in the image.
+
+                       
+                        # # Adding Gaussian noise
+                        # sigma_start_noise = 0.702
+                    
+
+                        # gaussian_noise = torch.randn(image.size()).to(self.config.device) * sigma_start_noise
+
+                        # # Add Gaussian noise to the image tensor, then clamp between 0 and 1
+                        # noisy_init_samples = torch.clamp(image + gaussian_noise, 0, 1)
+
+                        init_samples = noisy_init_samples
 
                         # Repeat the image tensor to match the batch size and channels
-                        init_samples = noisy_init_samples.unsqueeze(0).repeat(36, 1, 1,1).to(self.config.device)
+                        # init_samples = noisy_init_samples.unsqueeze(0).repeat(1, 1, 1,1).to(self.config.device)
                         init_samples = data_transform(self.config, init_samples)
                         
-
-
-                        max_val = init_samples.max()
-                        min_val = init_samples.min()
-
-                        # normalize the values between 0 and 1
-                        if max_val > min_val:
-                            init_samples = (init_samples - min_val) / (max_val - min_val)
-                        else:
-                            init_samples = init_samples / max_val
-
-
-                        # Now noisy_init_samples contains the image with Gaussian noise added 
-                        # save_image(init_samples,'init_samples/test_noisy_images_{}.png'.format(step))
-
                         
                         # here we changed from init_samples to noisy_image_samples!!!! 
                         all_samples = anneal_Langevin_dynamics(init_samples, test_score, sigmas.cpu().numpy(),
                                                                self.config.sampling.n_steps_each,
                                                                self.config.sampling.step_lr,
                                                                final_only=True, verbose=False,
-                                                               denoise=self.config.sampling.denoise)
+                                                               denoise=self.config.sampling.denoise, 
+                                                               sigma_noise_0 = sigma_start_noise, # sigma_start
+                                                               save_path = save_path)
+                        
+                        # sigma_check = np.linspace(1, 0.01, 40)
+                        # for i in range(40):
+                        #     all_samples = anneal_Langevin_dynamics(init_samples, test_score, sigmas.cpu().numpy(),
+                        #                                        self.config.sampling.n_steps_each,
+                        #                                        self.config.sampling.step_lr,
+                        #                                        final_only=True, verbose=False,
+                        #                                        denoise=self.config.sampling.denoise, 
+                        #                                        sigma_noise_0 = sigma_check[i], # sigma_start
+                        #                                        save_path = save_path)
 
 
 
@@ -304,6 +339,67 @@ class NCSNRunner():
                         save_image(image_grid,
                                    os.path.join(self.args.log_sample_path, 'image_grid_{}.png'.format(step)))
                         torch.save(sample, os.path.join(self.args.log_sample_path, 'samples_{}.pth'.format(step)))
+                        
+                        
+                        # denoised_images_anscombe = all_samples[-1]
+                        # torch.clamp(denoised_images_anscombe, 0, 1)
+                        # denoised_images_anscombe = denoised_images_anscombe * 35.37750244140625 # temp_max_anscombe
+                        # denoised_image_before_inverse_anscombe = (denoised_images_anscombe - torch.min(denoised_images_anscombe)) / (torch.max(denoised_images_anscombe) - torch.min(denoised_images_anscombe))
+                        # save_image(denoised_image_before_inverse_anscombe ,save_path +'/denoised_image_before_inverse_anscombe.png')
+                        # inverse_anscombe = (denoised_images_anscombe / 2) ** 2 - 3.0 / 8.0
+                        # inverse_anscombe = (inverse_anscombe - torch.min(inverse_anscombe)) / (torch.max(inverse_anscombe) - torch.min(inverse_anscombe))
+
+                        # print(f"image max value after inverse anscombe tranform: {torch.max(inverse_anscombe[0])}")
+                        # print(f"image min value after inverse anscombe tranform: {torch.min(inverse_anscombe[0])}")
+                        # for i in range(inverse_anscombe.size()[0]):
+                        #    save_image(inverse_anscombe[i] ,save_path + '/denoised_image_after_inverse_anscombe_{}.png'.format(i))
+
+                        # for i in range(8):
+
+                        #     # Load the images before and after denoising
+                        #     original_img = Image.open(save_path + "/original_image_{}.png".format(i))
+                        #     denoised_img = Image.open(save_path + "/denoised_image_{}.png".format(i))
+
+                        #     # Resize the original image to 128x128 to match the denoised image
+                        #     original_img_resized = original_img.resize((128, 128), Image.LANCZOS)
+
+                        #     # Convert both images to RGB to ensure they have 3 channels
+                        #     original_img_rgb = original_img_resized.convert('RGB')
+                        #     denoised_img_rgb = denoised_img.convert('RGB')
+
+                        #     original_img_rgb_array = np.array(original_img_rgb)
+                        #     denoised_img_rgb_array = np.array(denoised_img_rgb)
+
+                        #     # print(np.max(original_img_rgb_array))
+                        #     # print(np.min(original_img_rgb_array))
+                        #     # print(np.max(denoised_img_rgb_array))
+                        #     # print(np.min(denoised_img_rgb_array))
+
+                        #     # Calculate PSNR
+                        #     psnr_value = psnr(original_img_rgb_array, denoised_img_rgb_array)
+                        #     fid_value = calculate_fid(original_img_rgb_array , denoised_img_rgb_array)
+                        #     ssim_value = ssim(original_img_rgb_array, denoised_img_rgb_array , channel_axis=2)
+                            
+                        #     psnr_arr.append(psnr_value)
+                        #     fid_arr.append(fid_value)
+                        #     ssim_arr.append(ssim_value)
+
+
+                        # #print PSNR
+                        # print(f"PSNR values are: {np.round(psnr_arr,2)} dB", flush=True)
+                        # print(f"PSNR mean is: {np.mean(psnr_arr):.2f} dB", flush=True)
+                        # print(f"PSNR std is: {np.std(psnr_arr):.2f} dB", flush=True)
+
+                        # #print FID
+                        # # print(f"FID values are: {np.round(fid_arr,2)}", flush=True)
+                        # print(f"FID mean is: {np.mean(fid_arr):.2f}", flush=True)
+                        # print(f"FID std is: {np.std(fid_arr):.2f}", flush=True)
+
+                        # #print SSIM
+                        # # print(f"SSIM values are: {np.round(ssim_arr,2)}", flush=True)
+                        # print(f"SSIM mean is: {np.mean(ssim_arr):.2f}", flush=True)
+                        # print(f"SSIM std is: {np.std(ssim_arr):.2f}", flush=True)
+
 
                         del test_score
                         del all_samples
